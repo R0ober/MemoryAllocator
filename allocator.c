@@ -1,4 +1,4 @@
-#include "malloc.h"
+#include "allocator.h"
 #include <errno.h>
 #include <string.h>
 #include <stdio.h>
@@ -8,7 +8,7 @@
 block_header_t* free_list = NULL;
 
 
-void* bump_allocator(intptr_t size) {
+void* allocator_bump_allocator(intptr_t size) {
     void* ptr = sbrk(size);
     if (ptr == (void*) -1) {
         printf("bump_allocator failed with: %s \n",strerror(errno)); 
@@ -18,12 +18,12 @@ void* bump_allocator(intptr_t size) {
 
 }
 
-void* my_malloc(size_t size) {
+void* allocator_my_malloc(size_t size) {
     if(size == 0) {
         // invalid input 
         return NULL;
     }
-    void* allocated = bump_allocator(sizeof(block_header_t)+ size );
+    void* allocated = allocator_bump_allocator(sizeof(block_header_t)+ size );
     
     if (allocated == NULL) {
         // allocation failed return NULL 
@@ -44,4 +44,24 @@ void* my_malloc(size_t size) {
         curr->next = header;
     }
     return data_p;
+}
+
+void allocator_free(void * ptr) {
+    if (ptr == NULL){
+        printf("allocator_free failed: NULL pointer \n"); 
+        return;
+    }
+    block_header_t* header = (block_header_t*)ptr - 1; // step back sizeof(block_header_t) bytes.
+    header->is_free = 1;
+    // walk the list and coalese adj blocks if they have free data 
+    block_header_t* curr = free_list;
+    while (curr->next != NULL) {
+        if(curr->is_free && curr->next->is_free) {
+            curr->size = curr->size + sizeof(block_header_t) + curr->next->size;
+            curr->next = curr->next->next;
+        }
+        else {
+            curr = curr->next;
+        }
+    }
 }

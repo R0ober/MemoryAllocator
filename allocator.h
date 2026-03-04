@@ -8,4 +8,6 @@ typedef struct block_header{
     struct block_header* next;
 }block_header_t;
 
-void* bump_allocator(intptr_t size);
+void* allocator_bump_allocator(intptr_t size);
+void* allocator_my_malloc(size_t size);
+void allocator_free(void * ptr);
