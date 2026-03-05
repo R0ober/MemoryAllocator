@@ -17,8 +17,43 @@ void* allocator_bump_allocator(intptr_t size) {
     return ptr;
 
 }
+void* allocator_realloc(void* ptr, size_t new_size){
+    if(new_size == 0) {
+        // invalid input 
+        return NULL;
+    }
+    if (ptr == NULL) {
+        return allocator_malloc(new_size);
+    }
 
-void* allocator_my_malloc(size_t size) {
+    block_header_t* old_header = (block_header_t*)ptr - 1;
+    char* old_data = old_header + 1;
+    if (old_header->size >= new_size) {
+        // nothing to do return same pointer
+        return ptr;
+    }
+
+    size_t bytes_to_copy = old_header->size;
+    // look for a block that will fit the new size 
+    void* new_ptr = allocator_malloc(new_size);
+    if (new_ptr == NULL) {
+        return NULL;   // realloc fails
+    }
+    block_header_t* new_block_header = (block_header_t*)new_ptr - 1;
+
+    
+    char* new_data = new_block_header + 1;
+    // copy data 
+    size_t count = 0;
+    while(bytes_to_copy != count) {
+        *new_data++ = *old_data++;
+        count++;
+    }
+    allocator_free(ptr);
+    return new_ptr;
+}
+
+void* allocator_malloc(size_t size) {
     if(size == 0) {
         // invalid input 
         return NULL;

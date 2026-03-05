@@ -9,5 +9,5 @@ typedef struct block_header{
 }block_header_t;
 
 void* allocator_bump_allocator(intptr_t size);
-void* allocator_my_malloc(size_t size);
+void* allocator_malloc(size_t size);
 void allocator_free(void * ptr);
