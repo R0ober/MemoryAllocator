@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <stdint.h>
 
-
+#define MIN_SPLIT_ALLOWED 4
 block_header_t* free_list = NULL;
 
 
@@ -23,8 +23,35 @@ void* allocator_my_malloc(size_t size) {
         // invalid input 
         return NULL;
     }
+    // check already allocated free blocks before allocating more memory 
+    if (free_list!=NULL) {
+        block_header_t* curr = free_list;
+        while (curr != NULL) {
+            // already existing block logic 
+            if(curr->is_free && curr->size>= size) {
+                // check if split will result in a to small block
+                if(curr->size >= size + sizeof(block_header_t) + MIN_SPLIT_ALLOWED) {
+                    size_t remainder =  curr->size - size - sizeof(block_header_t);
+                    curr->size = size;
+                    curr->is_free = 0;
+                    
+                    block_header_t* next_header = (block_header_t*)((char*)curr + sizeof(block_header_t) + size);
+                    next_header->size = remainder;
+                    next_header->is_free = 1;
+                    next_header->next=curr->next;
+
+                    curr->next = next_header;
+                    void* data_p = curr + 1;
+                    return data_p;
+                } else {
+                    curr->is_free= 0;
+                    return curr + 1;
+                }
+            }
+        curr = curr->next;
+        }  
+    }
     void* allocated = allocator_bump_allocator(sizeof(block_header_t)+ size );
-    
     if (allocated == NULL) {
         // allocation failed return NULL 
         return NULL;
