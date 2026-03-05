@@ -5,6 +5,9 @@
 #include <stdint.h>
 
 #define MIN_SPLIT_ALLOWED 4
+#define ALIGNMENT 8
+// (size + N +1 ) & ~(N-1) where N is how we want to allign 
+#define ALIGN(size) (((size) + ALIGNMENT - 1) & ~(ALIGNMENT - 1))
 block_header_t* free_list = NULL;
 
 
@@ -58,6 +61,7 @@ void* allocator_malloc(size_t size) {
         // invalid input 
         return NULL;
     }
+    size = ALIGN(size);
     // check already allocated free blocks before allocating more memory 
     if (free_list!=NULL) {
         block_header_t* curr = free_list;
