@@ -6,7 +6,12 @@
     might need to add  setup() / teardown() functions to reset global state 
 */
 
+#define RESET     "\033[0m"
+#define BOLD      "\033[1m"
 
+#define COLOR_PASS  "\033[38;5;114m"    // soft green 
+#define COLOR_FAIL   "\033[38;5;203m"    // soft coral
+#define COLOR_RUN "\033[38;5;248m"  // light grey 
 static int SU_tests_run = 0;
 static int SU_tests_failed = 0;
 
@@ -49,12 +54,12 @@ static int SU_tests_failed = 0;
 #define RUN_TEST(test_fn) do { \
     int _failed_before = SU_tests_failed; \
     SU_tests_run++; \
-    printf("RUNNING: %s\n", #test_fn); \
+    printf(BOLD COLOR_RUN "RUNNING: %s\n" RESET, #test_fn); \
     test_fn(); \
     if (SU_tests_failed == _failed_before) { \
-        printf("  PASS: %s\n", #test_fn); \
+        printf(BOLD COLOR_PASS "  PASS: %s\n" RESET, #test_fn ); \
     } else { \
-        printf("  FAIL: %s\n", #test_fn); \
+        printf(BOLD COLOR_PASS"  FAIL: %s\n" RESET, #test_fn); \
     } \
 } while(0)
 
