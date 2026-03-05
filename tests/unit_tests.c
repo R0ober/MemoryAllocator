@@ -138,7 +138,7 @@ void test_allocator_calloc() {
     int size = 20 * 8; 
     char* objt = (char*)ptr; 
     for(int i = 0; i< size; i++) {
-        if(*objt==0) {
+        if(*objt++==0) {
             count++;
         }
     }
@@ -146,6 +146,7 @@ void test_allocator_calloc() {
 }
 
 int main(void) {
+    
     RUN_TEST(test_alloc_returns_non_null);
     RUN_TEST(test_write_and_read_back);
     RUN_TEST(test_sequential_allocations_are_contiguous);
@@ -157,6 +158,8 @@ int main(void) {
     RUN_TEST(test_allocator_realloc_in_place_case_returns_same_pointer);
     RUN_TEST(test_allocator_realloc_NULL_size_behaves_like_malloc);
     RUN_TEST(test_allocator_realloc_zero_size);
-    printf("size: %ld",sizeof(block_header_t));
+    RUN_TEST(test_allocator_calloc);
+    //printf("size: %ld",sizeof(block_header_t));
+    allocator_stats();
     return SU_report_and_return();
 }

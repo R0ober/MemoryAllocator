@@ -1,4 +1,5 @@
 #include "allocator.h"
+#include "visual.h"
 #include <errno.h>
 #include <string.h>
 #include <stdio.h>
@@ -6,6 +7,7 @@
 
 #define MIN_SPLIT_ALLOWED 4
 #define ALIGNMENT 8
+#define MAX(a,b) ((a) > (b) ? (a) : (b))
 // (size + N +1 ) & ~(N-1) where N is how we want to allign 
 #define ALIGN(size) (((size) + ALIGNMENT - 1) & ~(ALIGNMENT - 1))
 block_header_t* free_list = NULL;
@@ -140,4 +142,123 @@ void* allocator_calloc(size_t n, size_t size) {
         return NULL;
     }
     return memset(ptr,0,size*n);
+}
+
+void allocator_stats() {
+    // setting out how large each box should be 
+    const char *title = " HEAP VISUALIZER ";
+    int title_length = strlen(title);
+    int bar_width = 67;
+    size_t total_size = 0;
+    size_t total_free_size = 0;
+    size_t block_count = 0;
+    size_t free_blocks = 0;
+    block_header_t* curr = free_list;
+    int block_width;
+    if (curr == NULL) {
+        printf("default somethging");
+        return;
+    }
+    while (curr) {
+        total_size += curr->size;
+        block_count++;
+        
+        if(curr->is_free) {
+            total_free_size += curr->size;
+            free_blocks++;
+        }
+        curr = curr->next;
+    }
+
+    // compute summary length so we can ensure the frame is wide enough
+    size_t used_size   = total_size - total_free_size;
+    size_t used_blocks = block_count - free_blocks;
+    int fragmentation = (total_size == 0) ? 0 : (int)((total_free_size * 100) / total_size);
+    char summary_buf[256];
+    int summary_len = snprintf(summary_buf, sizeof(summary_buf),
+        "  Blocks: %zu  Used: %zub (%zu blocks)  Free: %zub (%zu blocks)  Fragmentation: %d%%",
+        block_count, used_size, used_blocks, total_free_size, free_blocks, fragmentation);
+
+    int frame_width = bar_width + block_count + 1;
+    if (frame_width < summary_len) {
+        frame_width = summary_len;
+        bar_width = frame_width - block_count - 1;
+    }
+    
+    // title bar 
+    int remaining_space = frame_width - title_length;
+    int left_padding = remaining_space / 2;
+    int right_padding = remaining_space - left_padding;
+    printf(COLOR_TITLE BOX_TL RESET);
+    for(int i=0; left_padding > i; i++) {
+        printf(COLOR_TITLE BOX_H RESET );
+    }
+    printf(COLOR_TITLE "%s" RESET, title);
+    for(int i=0; right_padding> i; i++) {
+        printf(COLOR_TITLE BOX_H RESET );
+    }
+    printf(COLOR_TITLE BOX_TR RESET );
+    printf("\n");
+   
+    curr = free_list;
+    
+    // bar draw logic 
+    printf("%-1s", " ");
+    int printed = 0;
+    while(curr != NULL) {
+        printf(SEP);
+        printed++;
+        block_width = MAX(1, (curr->size * bar_width) / total_size);  // min size if divsion end up resulting in zero size 
+        printed += block_width;
+        for(int i=0; block_width>i; i++) {
+            if(curr->is_free) {
+                printf(COLOR_FREE BLOCK_ALLOC RESET);
+            } else {
+                printf(COLOR_ALLOC BLOCK_ALLOC RESET);
+            }
+        }
+        curr = curr->next;
+    }
+    // close under bar
+    printf(SEP "\n");
+    printed++;
+    printf(COLOR_TITLE BOX_LT RESET);
+    for(int i=0;frame_width > i; i++) {
+        printf(COLOR_TITLE BOX_H RESET );
+    }
+    printf(COLOR_TITLE BOX_RT RESET);
+
+    printf("\n");
+
+    // list
+    int block_number = 0;
+    printf(COLOR_GOLD "  %-6s %-18s %-10s %-8s\n"RESET, "Block", "Address", "Size (B)", "Status");
+    curr = free_list;
+    while(curr != NULL) {
+        const char* status_color = curr->is_free ? COLOR_FREE : COLOR_ALLOC;
+        const char* status_str = curr->is_free ? "FREE" : "USED";
+        printf(COLOR_ADDR "  %-6d %-18p %-10zu " RESET, block_number++, (void*)(curr+1), curr->size);
+        printf("%s%-8s%s\n", status_color, status_str, RESET);
+        curr = curr->next;
+    }
+
+    // overview panel 
+    printf("\n");
+    printf(COLOR_GOLD "  Blocks: " COLOR_WHITE "%zu" COLOR_GOLD 
+       "  Used: " COLOR_CORAL "%zub (%zu blocks)" COLOR_GOLD
+       "  Free: " COLOR_GREEN "%zub (%zu blocks)" COLOR_GOLD  
+       "  Fragmentation: " COLOR_WHITE "%d%%\n" RESET,
+       block_count,
+       used_size, used_blocks,
+       total_free_size, free_blocks,
+       fragmentation);
+    
+    // close title 
+    printf(COLOR_TITLE BOX_BL RESET);
+    for(int i=0;frame_width > i; i++) {
+        printf(COLOR_TITLE BOX_H RESET );
+    }
+    printf(COLOR_TITLE BOX_BR RESET);
+    printf("\n");
+
 }
