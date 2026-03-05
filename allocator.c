@@ -131,3 +131,13 @@ void allocator_free(void * ptr) {
         }
     }
 }
+
+void* allocator_calloc(size_t n, size_t size) {
+    if (n != 0 && size > SIZE_MAX / n) return NULL;
+    
+    void* ptr = allocator_malloc(n*size);
+    if (ptr == NULL){
+        return NULL;
+    }
+    return memset(ptr,0,size*n);
+}

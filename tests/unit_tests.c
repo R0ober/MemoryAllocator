@@ -131,6 +131,19 @@ void test_allocator_realloc_NULL_size_behaves_like_malloc() {
     ASSERT_EQ(test->d,4);
 
 }
+void test_allocator_calloc() {
+    void* ptr = allocator_calloc(20,8); // 20 objects 8 bytes
+    ASSERT_NOT_EQ(ptr,NULL);
+    int count = 0;
+    int size = 20 * 8; 
+    char* objt = (char*)ptr; 
+    for(int i = 0; i< size; i++) {
+        if(*objt==0) {
+            count++;
+        }
+    }
+    ASSERT_EQ(count,20*8);
+}
 
 int main(void) {
     RUN_TEST(test_alloc_returns_non_null);
@@ -144,6 +157,6 @@ int main(void) {
     RUN_TEST(test_allocator_realloc_in_place_case_returns_same_pointer);
     RUN_TEST(test_allocator_realloc_NULL_size_behaves_like_malloc);
     RUN_TEST(test_allocator_realloc_zero_size);
-
+    printf("size: %ld",sizeof(block_header_t));
     return SU_report_and_return();
 }
