@@ -2,6 +2,9 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include "../allocator.h"
+
+extern block_header_t* free_list;
 /*
     might need to add  setup() / teardown() functions to reset global state 
 */
@@ -59,7 +62,7 @@ static int SU_tests_failed = 0;
     if (SU_tests_failed == _failed_before) { \
         printf(BOLD COLOR_PASS "  PASS: %s\n" RESET, #test_fn ); \
     } else { \
-        printf(BOLD COLOR_PASS"  FAIL: %s\n" RESET, #test_fn); \
+        printf(BOLD COLOR_FAIL"  FAIL: %s\n" RESET, #test_fn); \
     } \
 } while(0)
 

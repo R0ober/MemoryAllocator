@@ -4,8 +4,10 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdint.h>
+ #include <sys/mman.h>
 
 #define MIN_SPLIT_ALLOWED 4
+#define MMAP_THRESHOLD 4000
 #define ALIGNMENT 8
 #define MAX(a,b) ((a) > (b) ? (a) : (b))
 // (size + N +1 ) & ~(N-1) where N is how we want to allign 
@@ -64,6 +66,19 @@ void* allocator_malloc(size_t size) {
         return NULL;
     }
     size = ALIGN(size);
+    if (size >MMAP_THRESHOLD) {
+        void* ptr = mmap(NULL,sizeof(block_header_t) + size,PROT_READ | PROT_WRITE,MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        if (ptr == (void*) -1) {
+            printf("mmap failed with: %s \n",strerror(errno)); 
+            return NULL;
+        }
+        block_header_t* header = (block_header_t*)ptr;
+        header->is_mmap=1;
+        header->size=size;
+        header->is_free = 0;
+        header->next = NULL;
+        return header + 1;
+    }
     // check already allocated free blocks before allocating more memory 
     if (free_list!=NULL) {
         block_header_t* curr = free_list;
@@ -102,6 +117,7 @@ void* allocator_malloc(size_t size) {
     header->is_free = 0;
     header->size = size;
     header->next = NULL;
+    header->is_mmap = 0;
     if (free_list==NULL) {
         free_list = header;
     } else {
@@ -119,7 +135,16 @@ void allocator_free(void * ptr) {
         printf("allocator_free failed: NULL pointer \n"); 
         return;
     }
+
     block_header_t* header = (block_header_t*)ptr - 1; // step back sizeof(block_header_t) bytes.
+    if(header->is_mmap == 1) {
+        int fail = munmap((void*)header,header->size+ sizeof(block_header_t));
+        if( fail == -1) {
+            printf("munmap failed with: %s \n",strerror(errno)); 
+            return;
+        }
+        return;
+    }
     header->is_free = 1;
     // walk the list and coalese adj blocks if they have free data 
     block_header_t* curr = free_list;
@@ -143,6 +168,8 @@ void* allocator_calloc(size_t n, size_t size) {
     }
     return memset(ptr,0,size*n);
 }
+
+
 
 void allocator_stats() {
     // setting out how large each box should be 

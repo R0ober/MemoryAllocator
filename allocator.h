@@ -5,6 +5,7 @@
 typedef struct block_header{
     size_t size;
     int is_free;
+    int is_mmap;
     struct block_header* next;
 }block_header_t;
 

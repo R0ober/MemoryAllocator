@@ -144,6 +144,28 @@ void test_allocator_calloc() {
     }
     ASSERT_EQ(count,20*8);
 }
+void test_allocator_malloc_large_allocation() {
+    void* ptr = allocator_malloc(5000);
+    ASSERT_NOT_EQ(ptr,NULL);
+    unsigned char*  chars = (unsigned char*)ptr;
+    for(int i =0; i<5000; i++) {
+        chars[i]=i % 256;
+    }
+    for(int i=0; i<5000; i++) {
+        ASSERT_EQ(i % 256,chars[i]);
+    }
+}
+
+void test_allocator_malloc_large_allocation_doesnt_appear_in_free_list() {
+    
+    void* ptr = allocator_malloc(5000);
+    block_header_t* header = (block_header_t*)ptr-1;
+    block_header_t* curr = free_list;
+    while(curr != NULL) {
+        ASSERT_NOT_EQ(header,curr);
+        curr = curr->next;
+    }
+}
 
 int main(void) {
     
@@ -159,7 +181,10 @@ int main(void) {
     RUN_TEST(test_allocator_realloc_NULL_size_behaves_like_malloc);
     RUN_TEST(test_allocator_realloc_zero_size);
     RUN_TEST(test_allocator_calloc);
+    RUN_TEST(test_allocator_malloc_large_allocation);
+    RUN_TEST(test_allocator_malloc_large_allocation_doesnt_appear_in_free_list);
     //printf("size: %ld",sizeof(block_header_t));
-    allocator_stats();
     return SU_report_and_return();
+    //allocator_stats();
+    
 }
