@@ -274,6 +274,37 @@ void* allocator_calloc(size_t n, size_t size) {
     return memset(ptr,0,size*n);
 }
 
+void allocator_reset(void){
+    if (free_list == NULL) return;
+    block_header_t* curr = free_list;
+    block_header_t* prev = NULL;
+    while (curr != NULL) {
+        block_header_t* next = curr->next;
+#ifdef ALLOCATOR_USE_UNIX       
+        if (curr->is_mmap) {
+            munmap(curr,curr->size+ sizeof(block_header_t));
+            if(prev) {
+                prev->next = next;
+            } else {
+                free_list = next;
+            }
+        }
+        else 
+#endif
+        {
+            curr->is_free = 1;
+            prev = curr;
+        }
+        
+        curr = next;
+    }
+    curr = free_list;
+    while (curr->next != NULL) {
+        curr->size += sizeof(block_header_t) + curr->next->size;
+        curr->next = curr->next->next;
+    }
+}
+
 
 
 #ifdef ALLOCATOR_USE_UNIX
