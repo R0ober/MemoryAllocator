@@ -120,6 +120,7 @@ void* allocator_malloc(size_t size) {
                     block_header_t* next_header = (block_header_t*)((char*)curr + sizeof(block_header_t) + size);
                     next_header->size = remainder;
                     next_header->is_free = 1;
+                    next_header->is_mmap = 0;
                     next_header->next=curr->next;
 
                     curr->next = next_header;
@@ -202,6 +203,7 @@ void* allocator_malloc_best_fit(size_t size) {
             block_header_t* next_header = (block_header_t*)((char*)best_fit + sizeof(block_header_t) + size);
             next_header->size = remainder;
             next_header->is_free = 1;
+            next_header->is_mmap = 0;
             next_header->next=best_fit->next;
 
             best_fit->next = next_header;
@@ -242,17 +244,34 @@ void allocator_free(void * ptr) {
 
     block_header_t* header = (block_header_t*)ptr - 1; // step back sizeof(block_header_t) bytes.
 #ifdef ALLOCATOR_USE_UNIX
+    
+    block_header_t* prev = NULL;
+    block_header_t* curr = free_list;
     if(header->is_mmap == 1) {
-        int fail = munmap((void*)header, header->size + sizeof(block_header_t));
-        if(fail == -1) {
-            return;
+        while (curr != NULL) {
+            block_header_t* next = curr->next;
+            if(header==curr) {
+                int fail = munmap((void*)header, header->size + sizeof(block_header_t));
+                if(fail == -1) {
+                    return;
+                }
+                if(prev) {
+                    prev->next=next;
+                } else {
+                free_list = next;
+                }
+                return;
+            } else {
+                prev = curr;
+            }
+            curr = curr->next;
         }
         return;
     }
 #endif
     header->is_free = 1;
     // walk the list and coalese adj blocks if they have free data 
-    block_header_t* curr = free_list;
+    curr = free_list;
     while (curr->next != NULL) {
         if(curr->is_free && curr->next->is_free) {
             curr->size = curr->size + sizeof(block_header_t) + curr->next->size;
@@ -278,8 +297,11 @@ void allocator_reset(void){
     if (free_list == NULL) return;
     block_header_t* curr = free_list;
     block_header_t* prev = NULL;
+    printf("starting mmap loop\n");
     while (curr != NULL) {
         block_header_t* next = curr->next;
+        printf("curr: %p, is_mmap: %d, size: %zu\n", curr, curr->is_mmap, curr->size);
+        
 #ifdef ALLOCATOR_USE_UNIX       
         if (curr->is_mmap) {
             munmap(curr,curr->size+ sizeof(block_header_t));
@@ -300,9 +322,11 @@ void allocator_reset(void){
     }
     curr = free_list;
     while (curr->next != NULL) {
+        printf("starting coalesce loop\n");
         curr->size += sizeof(block_header_t) + curr->next->size;
         curr->next = curr->next->next;
     }
+    printf("reset done\n");
 }
 
 
@@ -313,7 +337,7 @@ void allocator_stats() {
     // setting out how large each box should be 
     const char *title = " HEAP ";
     int title_length = strlen(title);
-    int bar_width = 67;
+    int max_frame_width = 80;
     size_t total_size = 0;
     size_t total_free_size = 0;
     size_t block_count = 0;
@@ -344,11 +368,10 @@ void allocator_stats() {
         "  Blocks: %zu  Used: %zub (%zu blocks)  Free: %zub (%zu blocks)  Fragmentation: %d%%",
         block_count, used_size, used_blocks, total_free_size, free_blocks, fragmentation);
 
-    int frame_width = bar_width + block_count + 1;
-    if (frame_width < summary_len) {
-        frame_width = summary_len;
-        bar_width = frame_width - block_count - 1;
-    }
+    int frame_width = MAX(summary_len, max_frame_width);
+    frame_width = MAX(frame_width, title_length + 4);
+    // bar_width = usable columns for block chars per row (frame minus the leading space and closing sep)
+    int bar_width = frame_width - 2;
     
     // title bar 
     int remaining_space = frame_width - title_length;
@@ -367,14 +390,29 @@ void allocator_stats() {
    
     curr = free_list;
     
-    // bar draw logic 
-    printf("%-1s", " ");
-    int printed = 0;
+    // bar draw logic
+    printf(" ");
+    int row_used = 0;  // separators + block chars
     while(curr != NULL) {
+        block_width = MAX(1, (int)((curr->size * (size_t)bar_width) / total_size));
+        int need = 1 + block_width;  // separator + block chars
+
+        // would this block overflow the current row?
+        if (row_used > 0 && row_used + need + 1 > bar_width) {
+            printf(SEP "\n");
+            printf(COLOR_BORDER BOX_LT RESET);
+            for(int i=0; frame_width > i; i++) {
+                printf(COLOR_BORDER BOX_H RESET);
+            }
+            printf(COLOR_BORDER BOX_RT RESET);
+            printf("\n");
+            // start new row
+            printf(" ");
+            row_used = 0;
+        }
+
         printf(SEP);
-        printed++;
-        block_width = MAX(1, (curr->size * bar_width) / total_size);  // min size if divsion end up resulting in zero size 
-        printed += block_width;
+        row_used++;
         for(int i=0; block_width>i; i++) {
             if(curr->is_free) {
                 printf(COLOR_FREE BLOCK_ALLOC RESET);
@@ -382,11 +420,11 @@ void allocator_stats() {
                 printf(COLOR_ALLOC BLOCK_ALLOC RESET);
             }
         }
+        row_used += block_width;
         curr = curr->next;
     }
-    // close under bar
+    // close last bar row
     printf(SEP "\n");
-    printed++;
     printf(COLOR_BORDER BOX_LT RESET);
     for(int i=0;frame_width > i; i++) {
         printf(COLOR_BORDER BOX_H RESET );
@@ -407,7 +445,7 @@ void allocator_stats() {
         curr = curr->next;
     }
 
-    // overview panel 
+    //  panel 
     printf("\n");
     printf(COLOR_GOLD "  Blocks: " COLOR_WHITE "%zu" COLOR_GOLD 
        "  Used: " COLOR_CORAL "%zub (%zu blocks)" COLOR_GOLD
