@@ -1,10 +1,14 @@
 #include "allocator.h"
+#ifdef ALLOCATOR_USE_UNIX
 #include "visual.h"
+#endif
 #include <errno.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdint.h>
+#ifdef ALLOCATOR_USE_UNIX
  #include <sys/mman.h>
+#endif
 
 #define MIN_SPLIT_ALLOWED 4
 #define MMAP_THRESHOLD 4000
@@ -15,15 +19,36 @@
 block_header_t* free_list = NULL;
 
 
+#ifdef ALLOCATOR_USE_UNIX
+
 void* allocator_bump_allocator(intptr_t size) {
     void* ptr = sbrk(size);
-    if (ptr == (void*) -1) {
-        printf("bump_allocator failed with: %s \n",strerror(errno)); 
-        return NULL;
-    }
-    return ptr;
 
+    if (ptr == (void*)-1)
+        return NULL;
+
+    return ptr;
 }
+
+#endif
+
+#ifdef ALLOCATOR_USE_EMBEDDED
+
+static uint8_t heap[ALLOCATOR_HEAP_SIZE];
+static size_t offset = 0;
+
+void* allocator_bump_allocator(intptr_t size) {
+
+    if (offset + size > ALLOCATOR_HEAP_SIZE)
+        return NULL;
+
+    void* ptr = &heap[offset];
+    offset += size;
+
+    return ptr;
+}
+
+#endif
 void* allocator_realloc(void* ptr, size_t new_size){
     if(new_size == 0) {
         // invalid input 
@@ -34,7 +59,7 @@ void* allocator_realloc(void* ptr, size_t new_size){
     }
 
     block_header_t* old_header = (block_header_t*)ptr - 1;
-    char* old_data = old_header + 1;
+    char* old_data = (char*)(old_header + 1);
     if (old_header->size >= new_size) {
         // nothing to do return same pointer
         return ptr;
@@ -49,7 +74,7 @@ void* allocator_realloc(void* ptr, size_t new_size){
     block_header_t* new_block_header = (block_header_t*)new_ptr - 1;
 
     
-    char* new_data = new_block_header + 1;
+    char* new_data = (char*)(new_block_header + 1);
     // copy data 
     size_t count = 0;
     while(bytes_to_copy != count) {
@@ -66,19 +91,20 @@ void* allocator_malloc(size_t size) {
         return NULL;
     }
     size = ALIGN(size);
-    if (size >MMAP_THRESHOLD) {
-        void* ptr = mmap(NULL,sizeof(block_header_t) + size,PROT_READ | PROT_WRITE,MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+#ifdef ALLOCATOR_USE_UNIX
+    if (size > MMAP_THRESHOLD) {
+        void* ptr = mmap(NULL, sizeof(block_header_t) + size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
         if (ptr == (void*) -1) {
-            printf("mmap failed with: %s \n",strerror(errno)); 
             return NULL;
         }
         block_header_t* header = (block_header_t*)ptr;
-        header->is_mmap=1;
-        header->size=size;
+        header->is_mmap = 1;
+        header->size = size;
         header->is_free = 0;
         header->next = NULL;
         return header + 1;
     }
+#endif
     // check already allocated free blocks before allocating more memory 
     if (free_list!=NULL) {
         block_header_t* curr = free_list;
@@ -132,19 +158,19 @@ void* allocator_malloc(size_t size) {
 
 void allocator_free(void * ptr) {
     if (ptr == NULL){
-        printf("allocator_free failed: NULL pointer \n"); 
         return;
     }
 
     block_header_t* header = (block_header_t*)ptr - 1; // step back sizeof(block_header_t) bytes.
+#ifdef ALLOCATOR_USE_UNIX
     if(header->is_mmap == 1) {
-        int fail = munmap((void*)header,header->size+ sizeof(block_header_t));
-        if( fail == -1) {
-            printf("munmap failed with: %s \n",strerror(errno)); 
+        int fail = munmap((void*)header, header->size + sizeof(block_header_t));
+        if(fail == -1) {
             return;
         }
         return;
     }
+#endif
     header->is_free = 1;
     // walk the list and coalese adj blocks if they have free data 
     block_header_t* curr = free_list;
@@ -171,9 +197,11 @@ void* allocator_calloc(size_t n, size_t size) {
 
 
 
+#ifdef ALLOCATOR_USE_UNIX
+
 void allocator_stats() {
     // setting out how large each box should be 
-    const char *title = " HEAP VISUALIZER ";
+    const char *title = " HEAP ";
     int title_length = strlen(title);
     int bar_width = 67;
     size_t total_size = 0;
@@ -216,15 +244,15 @@ void allocator_stats() {
     int remaining_space = frame_width - title_length;
     int left_padding = remaining_space / 2;
     int right_padding = remaining_space - left_padding;
-    printf(COLOR_TITLE BOX_TL RESET);
+    printf(COLOR_BORDER BOX_TL RESET);
     for(int i=0; left_padding > i; i++) {
-        printf(COLOR_TITLE BOX_H RESET );
+        printf(COLOR_BORDER BOX_H RESET );
     }
-    printf(COLOR_TITLE "%s" RESET, title);
+    printf(COLOR_BORDER "%s" RESET, title);
     for(int i=0; right_padding> i; i++) {
-        printf(COLOR_TITLE BOX_H RESET );
+        printf(COLOR_BORDER BOX_H RESET );
     }
-    printf(COLOR_TITLE BOX_TR RESET );
+    printf(COLOR_BORDER BOX_TR RESET );
     printf("\n");
    
     curr = free_list;
@@ -249,11 +277,11 @@ void allocator_stats() {
     // close under bar
     printf(SEP "\n");
     printed++;
-    printf(COLOR_TITLE BOX_LT RESET);
+    printf(COLOR_BORDER BOX_LT RESET);
     for(int i=0;frame_width > i; i++) {
-        printf(COLOR_TITLE BOX_H RESET );
+        printf(COLOR_BORDER BOX_H RESET );
     }
-    printf(COLOR_TITLE BOX_RT RESET);
+    printf(COLOR_BORDER BOX_RT RESET);
 
     printf("\n");
 
@@ -281,11 +309,13 @@ void allocator_stats() {
        fragmentation);
     
     // close title 
-    printf(COLOR_TITLE BOX_BL RESET);
+    printf(COLOR_BORDER BOX_BL RESET);
     for(int i=0;frame_width > i; i++) {
-        printf(COLOR_TITLE BOX_H RESET );
+        printf(COLOR_BORDER BOX_H RESET );
     }
-    printf(COLOR_TITLE BOX_BR RESET);
+    printf(COLOR_BORDER BOX_BR RESET);
     printf("\n");
 
 }
+
+#endif
