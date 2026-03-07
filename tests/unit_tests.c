@@ -184,7 +184,8 @@ int main(void) {
     RUN_TEST(test_allocator_malloc_large_allocation);
     RUN_TEST(test_allocator_malloc_large_allocation_doesnt_appear_in_free_list);
     //printf("size: %ld",sizeof(block_header_t));
+    allocator_stats();
     return SU_report_and_return();
-    //allocator_stats();
+    
     
 }
