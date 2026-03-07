@@ -297,10 +297,8 @@ void allocator_reset(void){
     if (free_list == NULL) return;
     block_header_t* curr = free_list;
     block_header_t* prev = NULL;
-    printf("starting mmap loop\n");
     while (curr != NULL) {
         block_header_t* next = curr->next;
-        printf("curr: %p, is_mmap: %d, size: %zu\n", curr, curr->is_mmap, curr->size);
         
 #ifdef ALLOCATOR_USE_UNIX       
         if (curr->is_mmap) {
@@ -322,11 +320,9 @@ void allocator_reset(void){
     }
     curr = free_list;
     while (curr->next != NULL) {
-        printf("starting coalesce loop\n");
         curr->size += sizeof(block_header_t) + curr->next->size;
         curr->next = curr->next->next;
     }
-    printf("reset done\n");
 }
 
 
@@ -334,16 +330,15 @@ void allocator_reset(void){
 #ifdef ALLOCATOR_USE_UNIX
 
 void allocator_stats() {
-    // setting out how large each box should be 
     const char *title = " HEAP ";
     int title_length = strlen(title);
     int max_frame_width = 80;
     size_t total_size = 0;
     size_t total_free_size = 0;
+    size_t largest_free = 0;
     size_t block_count = 0;
     size_t free_blocks = 0;
     block_header_t* curr = free_list;
-    int block_width;
     if (curr == NULL) {
         printf("default somethging");
         return;
@@ -355,14 +350,18 @@ void allocator_stats() {
         if(curr->is_free) {
             total_free_size += curr->size;
             free_blocks++;
+            if (curr->size > largest_free)
+                largest_free = curr->size;
         }
         curr = curr->next;
     }
 
-    // compute summary length so we can ensure the frame is wide enough
+    // compute summary length
     size_t used_size   = total_size - total_free_size;
     size_t used_blocks = block_count - free_blocks;
-    int fragmentation = (total_size == 0) ? 0 : (int)((total_free_size * 100) / total_size);
+    // external fragmentation: 1 - (largest_free_block / total_free_memory)
+    // 0% = all free memory in one block, 100% = scattered into tiny holes
+    int fragmentation = (total_free_size == 0) ? 0 : (int)(100 - (largest_free * 100) / total_free_size);
     char summary_buf[256];
     int summary_len = snprintf(summary_buf, sizeof(summary_buf),
         "  Blocks: %zu  Used: %zub (%zu blocks)  Free: %zub (%zu blocks)  Fragmentation: %d%%",
@@ -370,7 +369,7 @@ void allocator_stats() {
 
     int frame_width = MAX(summary_len, max_frame_width);
     frame_width = MAX(frame_width, title_length + 4);
-    // bar_width = usable columns for block chars per row (frame minus the leading space and closing sep)
+    // usable columns for block chars per row
     int bar_width = frame_width - 2;
     
     // title bar 
@@ -390,48 +389,62 @@ void allocator_stats() {
    
     curr = free_list;
     
-    // bar draw logic
-    printf(" ");
-    int row_used = 0;  // separators + block chars
-    while(curr != NULL) {
-        block_width = MAX(1, (int)((curr->size * (size_t)bar_width) / total_size));
-        int need = 1 + block_width;  // separator + block chars
-
-        // would this block overflow the current row?
-        if (row_used > 0 && row_used + need + 1 > bar_width) {
-            printf(SEP "\n");
-            printf(COLOR_BORDER BOX_LT RESET);
-            for(int i=0; frame_width > i; i++) {
-                printf(COLOR_BORDER BOX_H RESET);
-            }
-            printf(COLOR_BORDER BOX_RT RESET);
-            printf("\n");
-            // start new row
-            printf(" ");
-            row_used = 0;
+    // bar draw logic 
+    // first pass: figure out how many blocks fit per row 
+    // distrubute proportionally 
+    int max_blocks_per_row = (bar_width - 1) / 2;  
+    if (max_blocks_per_row < 1) max_blocks_per_row = 1;
+    curr = free_list;
+    while (curr != NULL) {
+        // collect this row's blocks
+        size_t row_block_count = 0;
+        size_t row_total_size = 0;
+        block_header_t* tmp = curr;
+        while (tmp != NULL && (int)row_block_count < max_blocks_per_row) {
+            row_block_count++;
+            row_total_size += tmp->size;
+            tmp = tmp->next;
         }
 
-        printf(SEP);
-        row_used++;
-        for(int i=0; block_width>i; i++) {
-            if(curr->is_free) {
-                printf(COLOR_FREE BLOCK_ALLOC RESET);
+        // available columns for block chars on this row (subtract separators)
+        int avail = bar_width - (int)row_block_count - 1; 
+        if (avail < (int)row_block_count) avail = (int)row_block_count;
+
+        // draw this row
+        printf(" ");
+        int used_cols = 0;
+        for (size_t i = 0; i < row_block_count && curr != NULL; i++) {
+            int bw;
+            if (row_total_size > 0) {
+                bw = MAX(1, (int)((curr->size * (size_t)avail) / row_total_size));
             } else {
-                printf(COLOR_ALLOC BLOCK_ALLOC RESET);
+                bw = 1;
             }
-        }
-        row_used += block_width;
-        curr = curr->next;
-    }
-    // close last bar row
-    printf(SEP "\n");
-    printf(COLOR_BORDER BOX_LT RESET);
-    for(int i=0;frame_width > i; i++) {
-        printf(COLOR_BORDER BOX_H RESET );
-    }
-    printf(COLOR_BORDER BOX_RT RESET);
+            // gaurd not overflow the row
+            if (used_cols + bw > avail) bw = avail - used_cols;
+            if (bw < 1) bw = 1;
 
-    printf("\n");
+            printf(SEP);
+            for (int j = 0; j < bw; j++) {
+                if (curr->is_free) {
+                    printf(COLOR_FREE BLOCK_ALLOC RESET);
+                } else {
+                    printf(COLOR_ALLOC BLOCK_ALLOC RESET);
+                }
+            }
+            used_cols += bw;
+            curr = curr->next;
+        }
+        printf(SEP "\n");
+
+        // separator between rows
+        printf(COLOR_BORDER BOX_LT RESET);
+        for (int i = 0; frame_width > i; i++) {
+            printf(COLOR_BORDER BOX_H RESET);
+        }
+        printf(COLOR_BORDER BOX_RT RESET);
+        printf("\n");
+    }
 
     // list
     int block_number = 0;
