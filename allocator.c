@@ -156,6 +156,85 @@ void* allocator_malloc(size_t size) {
     return data_p;
 }
 
+void* allocator_malloc_best_fit(size_t size) {
+    if(size == 0) {
+        // invalid input 
+        return NULL;
+    }
+    size = ALIGN(size);
+#ifdef ALLOCATOR_USE_UNIX
+    if (size > MMAP_THRESHOLD) {
+        void* ptr = mmap(NULL, sizeof(block_header_t) + size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        if (ptr == (void*) -1) {
+            return NULL;
+        }
+        block_header_t* header = (block_header_t*)ptr;
+        header->is_mmap = 1;
+        header->size = size;
+        header->is_free = 0;
+        header->next = NULL;
+        return header + 1;
+    }
+#endif
+    if (free_list!=NULL) {
+        block_header_t* curr = free_list;
+        block_header_t* best_fit = NULL;
+        while (curr != NULL) {
+            if(curr->is_free && curr->size>= size) {
+                if (curr->size == size) {
+                best_fit = curr;
+                break;   // perfect match
+                }
+                if(best_fit == NULL || curr->size < best_fit->size) {
+                    best_fit=curr;
+                }
+            }
+        curr = curr->next;
+        }
+        if (best_fit == NULL) {
+            return NULL;
+        }
+        if(best_fit->size >= size + sizeof(block_header_t) + MIN_SPLIT_ALLOWED) {
+            size_t remainder =  best_fit->size - size - sizeof(block_header_t);
+            best_fit->size = size;
+            best_fit->is_free = 0;
+            
+            block_header_t* next_header = (block_header_t*)((char*)best_fit + sizeof(block_header_t) + size);
+            next_header->size = remainder;
+            next_header->is_free = 1;
+            next_header->next=best_fit->next;
+
+            best_fit->next = next_header;
+            void* data_p = best_fit + 1;
+            return data_p;
+        } else {
+            best_fit->is_free= 0;
+            return best_fit + 1;
+        }
+    }
+    void* allocated = allocator_bump_allocator(sizeof(block_header_t)+ size );
+    if (allocated == NULL) {
+        // allocation failed return NULL 
+        return NULL;
+    }
+    block_header_t* header = (block_header_t*) allocated;
+    void* data_p = header + 1;
+    header->is_free = 0;
+    header->size = size;
+    header->next = NULL;
+    header->is_mmap = 0;
+    if (free_list==NULL) {
+        free_list = header;
+    } else {
+        block_header_t* curr = free_list;
+        while (curr->next != NULL) {
+            curr = curr->next;
+        }
+        curr->next = header;
+    }
+    return data_p;
+}
+
 void allocator_free(void * ptr) {
     if (ptr == NULL){
         return;

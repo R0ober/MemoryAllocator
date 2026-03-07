@@ -1,6 +1,6 @@
 #pragma once
 
-/* Pick exactly one: -DALLOCATOR_USE_UNIX or -DALLOCATOR_USE_EMBEDDED */
+/* pick -DALLOCATOR_USE_UNIX or -DALLOCATOR_USE_EMBEDDED */
 #if !defined(ALLOCATOR_USE_UNIX) && !defined(ALLOCATOR_USE_EMBEDDED)
   #define ALLOCATOR_USE_UNIX   /* default to unix */
 #endif
