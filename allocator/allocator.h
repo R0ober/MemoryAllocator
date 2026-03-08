@@ -1,20 +1,11 @@
 #pragma once
 
-/* pick -DALLOCATOR_USE_UNIX or -DALLOCATOR_USE_EMBEDDED */
-#if !defined(ALLOCATOR_USE_UNIX) && !defined(ALLOCATOR_USE_EMBEDDED)
-  #define ALLOCATOR_USE_UNIX   /* default to unix */
-#endif
+#include "../common/bump.h"
 
-#ifdef ALLOCATOR_USE_UNIX
-  #include <unistd.h>
-  #include <stdint.h>
-#endif
-
-#ifdef ALLOCATOR_USE_EMBEDDED
-  #include <stdint.h>
-  #include <stddef.h>
-  #ifndef ALLOCATOR_HEAP_SIZE
-    #define ALLOCATOR_HEAP_SIZE 8192
+/* gate mmap, allocator_stats, and other unix-only allocator code */
+#ifndef ALLOCATOR_USE_UNIX
+  #ifdef BUMP_USE_UNIX
+    #define ALLOCATOR_USE_UNIX
   #endif
 #endif
 
@@ -25,7 +16,6 @@ typedef struct block_header{
     struct block_header* next;
 }block_header_t;
 
-void* allocator_bump_allocator(intptr_t size);
 void* allocator_malloc(size_t size);
 void  allocator_free(void * ptr);
 void* allocator_realloc(void* ptr, size_t new_size);

@@ -1,6 +1,6 @@
 #include "allocator.h"
 #ifdef ALLOCATOR_USE_UNIX
-#include "visual.h"
+#include "../visual.h"
 #endif
 #include <errno.h>
 #include <string.h>
@@ -18,37 +18,6 @@
 #define ALIGN(size) (((size) + ALIGNMENT - 1) & ~(ALIGNMENT - 1))
 block_header_t* free_list = NULL;
 
-
-#ifdef ALLOCATOR_USE_UNIX
-
-void* allocator_bump_allocator(intptr_t size) {
-    void* ptr = sbrk(size);
-
-    if (ptr == (void*)-1)
-        return NULL;
-
-    return ptr;
-}
-
-#endif
-
-#ifdef ALLOCATOR_USE_EMBEDDED
-
-static uint8_t heap[ALLOCATOR_HEAP_SIZE];
-static size_t offset = 0;
-
-void* allocator_bump_allocator(intptr_t size) {
-
-    if (offset + size > ALLOCATOR_HEAP_SIZE)
-        return NULL;
-
-    void* ptr = &heap[offset];
-    offset += size;
-
-    return ptr;
-}
-
-#endif
 void* allocator_realloc(void* ptr, size_t new_size){
     if(new_size == 0) {
         // invalid input 
@@ -243,10 +212,9 @@ void allocator_free(void * ptr) {
     }
 
     block_header_t* header = (block_header_t*)ptr - 1; // step back sizeof(block_header_t) bytes.
-#ifdef ALLOCATOR_USE_UNIX
-    
     block_header_t* prev = NULL;
     block_header_t* curr = free_list;
+#ifdef ALLOCATOR_USE_UNIX
     if(header->is_mmap == 1) {
         while (curr != NULL) {
             block_header_t* next = curr->next;

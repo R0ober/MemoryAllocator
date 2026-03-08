@@ -1,6 +1,6 @@
 #include <time.h>
 #include <stdio.h>
-#include "../allocator.h"
+#include "../allocator/allocator.h"
 
 extern block_header_t* free_list;
 
